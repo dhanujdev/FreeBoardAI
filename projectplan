@@ -1,0 +1,290 @@
+
+
+# 🧠 Freeform-Next: AI Whiteboard for iPad
+
+An iPad-first infinite canvas with **Apple Pencil** and **on-device AI** that turns chats into **structured mind maps** with draggable blocks, smart connectors, and fast offline performance. Privacy-first, collaboration-ready.
+
+---
+
+## ✨ Highlights (What’s better than Freeform)
+
+* **AI → Mind Map**: turn any prompt or chat into a clean topic tree (nodes + connectors) on-device.
+* **Pencil-native UX**: PencilKit drawing + Pencil Pro gestures (where available).
+* **Document-based**: each board is a document; supports multi-window, Files app, and iCloud Drive.
+* **Offline-first**: everything local by default; sync/collab can be enabled later.
+* **Export anywhere**: PNG/PDF/JSON (mind-map tree), plus share sheets and Quick Look.
+
+---
+
+## ✅ Feature Matrix
+
+| Category                            | MVP                       | Polished                        | Pro                                       |
+| ----------------------------------- | ------------------------- | ------------------------------- | ----------------------------------------- |
+| Infinite canvas (pan/zoom, inertia) | ✅                         |                                 |                                           |
+| Apple Pencil drawing (PencilKit)    | ✅                         | Pressure/tilt smoothing         | Custom tools, Pencil Pro squeeze/roll     |
+| Blocks (text nodes)                 | ✅                         | Rich text (TextKit 2), styles   | Media nodes (images, PDFs, links preview) |
+| Connectors (auto layout + manual)   | ✅                         | Orthogonal/spline routing       | Auto-reroute on move, labels              |
+| AI → Mind Map (on-device)           | ✅ JSON tree               | Topic deduplication, clustering | Incremental refine (“expand node with…”)  |
+| Undo/Redo, Snap-to-grid/guides      | ✅                         | Smart alignment                 | Layout presets (tree/radial/force)        |
+| Persistence (local)                 | ✅ Core Data               | Autosave/versioning             | Time-machine timeline                     |
+| Import/Export                       | ✅ PNG/PDF/JSON            | SVG export                      | Freeform export/interop (if feasible)     |
+| Accessibility                       | ✅ Dynamic Type, VoiceOver | Focus order for nodes           | Full keyboard control                     |
+| Multi-window & Files integration    | ✅                         | Recent documents                |                                           |
+| Collaboration (optional)            |                           | CKShare link                    | Real-time, conflict-free CRDT             |
+| App Intents & Shortcuts             |                           | Quick actions                   | Automations (e.g., “Mind map clipboard”)  |
+| TipKit onboarding                   | ✅                         | Contextual tips                 | Progressive education                     |
+
+---
+
+## 🧰 Tech Stack (Right tools, no fluff)
+
+* **UI & App**
+
+  * **SwiftUI** for app chrome, inspectors, tool palettes, document browser (DocumentGroup).
+  * **UIKit + PencilKit** for the performant canvas: `PKCanvasView` as the drawing layer, with overlays for nodes/connectors.
+  * **UIScrollView** (or custom) backing for zoomable, tiled canvas; SwiftUI embeds via `UIViewRepresentable`.
+* **Drawing & Layout**
+
+  * **PencilKit** (`PKCanvasView`, `PKToolPicker`) for strokes.
+  * **Core Animation** (`CAShapeLayer`) or **Metal-backed** rendering for connectors when density grows.
+  * **TextKit 2** for rich text in nodes (inline formatting, lists, code).
+* **AI (On-device)**
+
+  * **Core ML** model that converts free text → topic tree (JSON). Options:
+
+    * Small instruction-tuned transformer (quantized) for topic extraction + outline.
+    * Lightweight embedding + clustering pipeline for “grouping”/dedupe.
+  * **NLTokenizer** / custom parser for sentence/phrase chunking.
+  * **BNNS/MPSGraph** via Core ML for acceleration where needed.
+* **Data & Files**
+
+  * **Document-based app** (`UTType` custom “.aiboard”), with **Core Data** graph schema.
+  * Optional sync via **NSPersistentCloudKitContainer** (opt-in).
+  * **Codable** mind-map JSON for import/export.
+* **Share, Preview, Export**
+
+  * **PDFKit** / Core Graphics for PDF export.
+  * **Quick Look** for board previews.
+  * **UIActivityViewController / ShareLink** for share.
+* **System Integration**
+
+  * **App Intents** + **Shortcuts** (Create Board from clipboard text, Export as PDF, Append selection to node).
+  * **TipKit** for in-context tips.
+  * **Widgets** (later): recent boards.
+* **Testing & Quality**
+
+  * **XCTest** (+ Snapshot testing for nodes/connectors).
+  * **Xcode Instruments** (Time Profiler, Core Animation FPS).
+  * **MetricKit** for crash/perf telemetry (opt-in, privacy-safe).
+
+> 📌 We deliberately avoid any private “Apple Intelligence” APIs. Everything here is publicly shippable on the App Store.
+
+---
+
+## 🧠 Data Model (Core Data)
+
+**Entities**
+
+* `Board`: id, title, createdAt, updatedAt, viewport, theme
+* `Node`: id, boardID, text (RTF/Markdown), frame (x,y,w,h), style, zIndex, metadata
+* `Edge`: id, boardID, sourceNodeID, targetNodeID, style (orthogonal/spline), label
+* `Stroke`: id, boardID, `PKDrawing` data blob (compressed)
+* `Attachment` (optional): id, nodeID, type (image/pdf/link), payload URL/thumbnail
+
+**Why Core Data?**
+Fast fetches for large boards, easy undo/redo integration, CloudKit later with minimal rework.
+
+---
+
+## 🔄 AI → Mind Map Contract
+
+* **Input**: free text (chat history or a single prompt)
+* **Output** (strict JSON; small schema):
+
+```json
+{
+  "topic": "Root Topic",
+  "children": [
+    { "topic": "Child A", "children": [ { "topic": "Leaf" } ] },
+    { "topic": "Child B" }
+  ]
+}
+```
+
+* **Post-processing**:
+
+  * Deduplicate topics (case/lemma).
+  * Limit breadth/depth via heuristics (e.g., max 7 children per node).
+  * Style mapping (root = bold, children = normal).
+  * Auto-layout (tree/radial). Re-run layout only for changed subtrees.
+
+---
+
+## 🧭 Development Flow (8 sprints)
+
+**Sprint 0 – Project & Foundations (1 week)**
+
+* App template: SwiftUI App + `DocumentGroup`.
+* Custom UTType `com.yourco.aiboard`.
+* Empty canvas with pan/zoom; FPS overlay; snapshot tests scaffold.
+
+**Sprint 1 – Pencil & Canvas (1–2 weeks)**
+
+* Integrate `PKCanvasView` + `PKToolPicker`.
+* Stroke persistence (`PKDrawing` in Core Data).
+* Smooth zooming; tile backing store for large canvases.
+
+**Sprint 2 – Nodes & Connectors (2 weeks)**
+
+* Node view (SwiftUI) embedded over canvas; drag, resize, edit.
+* Connector engine: straight + orthogonal; anchors on node sides.
+* Hit-testing; selection model; alignment guides & snap.
+
+**Sprint 3 – AI MVP (2 weeks)**
+
+* Core ML model loader & inference wrapper.
+* Prompt → JSON tree → node/edge graph.
+* Basic auto-layout (hierarchical tree, left-to-right).
+* “Generate from prompt” & “Regenerate selected subtree”.
+
+**Sprint 4 – Persistence & Document UX (1 week)**
+
+* Auto-save/auto-versioning; recent documents; thumbnails.
+* Import/export: PNG/PDF/JSON.
+* Quick Look preview extension.
+
+**Sprint 5 – Polish & Performance (1–2 weeks)**
+
+* TextKit 2 rich text in nodes (bold, lists, inline code).
+* Large board perf: layer reuse, throttled relayout, off-main decoding.
+* Accessibility pass (VoiceOver labels for nodes/edges; rotor order).
+
+**Sprint 6 – Nice-to-Haves (1–2 weeks)**
+
+* Pencil Pro gestures: squeeze = quick node; roll = tool size.
+* TipKit onboarding; App Intents + Shortcuts.
+* Theming; radial/force-directed layout option.
+
+**Sprint 7 – Optional Collaboration (later)**
+
+* Turn on **NSPersistentCloudKitContainer**; document sharing with **CKShare**.
+* (Advanced) migrate to CRDT for real-time multi-cursor editing.
+
+---
+
+## 🧪 Testing Strategy
+
+* **Unit**: AI parsing → JSON schema, layout math, Core Data CRUD.
+* **Snapshot**: node/connector rendering across scales, light/dark, languages.
+* **Performance**: target 60fps with 1k nodes / 5k edges on M-series iPads; memory < 300MB active.
+* **Stability**: Fuzz drag/resizes, random graph generators, autosave under stress.
+* **Accessibility**: VoiceOver scripted runs; large text; high contrast.
+
+---
+
+## 📤 Export & Interop
+
+* **PNG**: current viewport or full board at scale.
+* **PDF**: paginated or giant single page; vector connectors; rasterized strokes.
+* **JSON**: full `Board` graph for backups and third-party tooling.
+* **(Optional)** SVG for mind-map interchange (connectors as paths; nodes as groups).
+
+---
+
+## 🔐 Privacy & Offline
+
+* Default is fully offline; no network permissions.
+* Opt-in cloud sync & crash reports.
+* Model files stored on-device; allow users to delete models & caches.
+* Clear “what AI does locally” disclosure in Settings.
+
+---
+
+## 🗂 Project Layout
+
+```
+FreeformNext/
+├─ App/
+│  ├─ FreeformNextApp.swift
+│  └─ Document/ (DocumentGroup, thumbnails, previews)
+├─ Canvas/
+│  ├─ CanvasViewController.swift        // UIScrollView + PKCanvasView
+│  ├─ CanvasHosting.swift               // SwiftUI bridge
+│  ├─ ConnectorLayer.swift              // CAShapeLayer routing
+│  └─ HitTesting.swift
+├─ Nodes/
+│  ├─ NodeView.swift                    // SwiftUI
+│  ├─ NodeModel.swift
+│  └─ TextKitSupport/
+├─ AI/
+│  ├─ MindMapModel.mlmodel
+│  ├─ MindMapInference.swift
+│  └─ PostProcessing.swift
+├─ Data/
+│  ├─ PersistenceController.swift       // Core Data + autosave
+│  ├─ Models.xcdatamodeld
+│  └─ Serialization/ (JSON import/export)
+├─ Features/
+│  ├─ Export/
+│  ├─ Shortcuts/
+│  └─ Tips/
+├─ Tests/
+│  ├─ Unit/
+│  └─ Snapshot/
+└─ README.md
+```
+
+---
+
+## 🧩 Implementation Notes & Traps (so you don’t step on them)
+
+* **Canvas perf**: keep nodes/edges in lightweight layers; avoid too many SwiftUI views at deep zooms. Defer expensive text layout until idle.
+* **Gesture conflicts**: Pencil draws; finger pans; long-press = node menu. Respect Apple’s Pencil/finger conventions.
+* **Auto-layout**: run layout on a background queue; animate to final positions; throttle during active drags.
+* **Undo/Redo**: leverage Core Data undo manager + explicit transactions for grouped edits (e.g., “AI insert subtree”).
+* **File size**: compress `PKDrawing` blobs; dedupe attachments; lazy-load thumbnails.
+* **AI latency**: cache embeddings; pre-warm model; cap output size via prompts + post-filters.
+
+---
+
+## 🧾 Roadmap (Issues you can file today)
+
+* [ ] Canvas: tiled backing store
+* [ ] Nodes: selection ring + resize handles
+* [ ] Connectors: orthogonal router with obstacle avoidance
+* [ ] AI: model selection & quantization plan
+* [ ] Export: vector PDF with raster strokes
+* [ ] TipKit: first-run tips
+* [ ] App Intents: “Generate board from clipboard”
+* [ ] Accessibility: VoiceOver labels for connectors (“A → B”)
+* [ ] Localization: base strings & RTL layout sanity checks
+
+---
+
+## 📎 Example App Intents (Shortcuts)
+
+* **Generate Mind Map from Clipboard**
+* **Export Current Board as PDF to Files**
+* **Append Selected Text to Node**
+* **Create New Board From URL (scrape headings → topics)**
+
+---
+
+## 📘 Licensing
+
+MIT. See `LICENSE`.
+
+---
+
+### FAQ (dev-focused)
+
+* **Why UIKit for canvas if the app is SwiftUI?**
+  For dense, zoomable, layered graphics, UIKit + Core Animation remains faster and more predictable. SwiftUI wraps it nicely for the rest.
+
+* **Which model should I start with?**
+  Start tiny: a distilled/quantized transformer (few hundred MB) tuned to produce concise outline JSON. Add an embedding step only if you need clustering/deduplication.
+
+* **Can I ship without collaboration?**
+  Absolutely. Ship single-player first; add CloudKit sync later without redesign thanks to the document-based + Core Data foundation.
+
+--
